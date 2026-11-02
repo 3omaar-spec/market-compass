@@ -1,0 +1,27 @@
+name: Market scan
+on:
+  schedule:
+    - cron: '7 0,4,8,12,16,20 * * *'   # 7 minutes after each 4-hour candle closes (UTC)
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scanner.mjs
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TWELVE_KEY: ${{ secrets.TWELVE_KEY }}
+          NEWS_KEY: ${{ secrets.NEWS_KEY }}
+          APP_URL: ${{ vars.APP_URL }}
+          ACCOUNT_SIZE: ${{ vars.ACCOUNT_SIZE }}
+          RISK_PCT: ${{ vars.RISK_PCT }}
+          MIN_SCORE: ${{ vars.MIN_SCORE }}
+          MIN_PROB: ${{ vars.MIN_PROB }}
+          DAILY_SUMMARY: '1'

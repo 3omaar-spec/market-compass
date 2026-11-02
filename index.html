@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Market Compass</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Compass">
+<meta name="theme-color" content="#0d1117">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one column of signal tickets under a sticky header with segmented tabs; numbers set in mono like a trading blotter. */
+:root {
+  --bg: #0d1117; --panel: #151b24; --line: #243041; --fg: #e6edf3; --muted: #8b98a8;
+  --accent: #f0b429; --long: #2fbf71; --short: #f2545b; --warn: #f5a524;
+  --display: 'Familjen Grotesk', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font: 15px/1.45 -apple-system, system-ui, sans-serif; padding-bottom: calc(24px + env(safe-area-inset-bottom)); -webkit-tap-highlight-color: transparent; }
+.wrap { max-width: 720px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top); }
+.top { display: flex; align-items: center; gap: 12px; padding-block: 12px 8px; }
+.brand { font: 700 22px/1 var(--display); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+.brand svg { width: 22px; height: 22px; }
+.top .spacer { flex: 1; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.btn { background: var(--accent); color: #1a1300; border: 0; border-radius: 10px; padding: 9px 14px; font-weight: 700; }
+.btn:disabled { opacity: .55; }
+.btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 600; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 10px; }
+.chip { font: 600 12px/1 var(--mono); padding: 6px 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); }
+.chip b { color: var(--fg); font-weight: 600; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: none; background: none; border: 0; padding: 7px 11px; border-radius: 8px; color: var(--muted); font-weight: 600; font-size: 14px; }
+.tab[aria-selected="true"] { background: var(--panel); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+.progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.status { font-size: 13px; color: var(--muted); padding-block: 14px 4px; }
+h2 { font: 700 18px/1.2 var(--display); margin: 22px 0 10px; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 13px; margin: -4px 0 12px; }
+.list { display: grid; gap: 12px; }
+.ticket { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.ticket.go { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.t-head { display: flex; align-items: center; gap: 10px; padding: 14px 14px 10px; }
+.sym { font: 700 19px/1 var(--display); }
+.sym small { display: block; font: 400 12px/1.3 var(--mono); color: var(--muted); margin-top: 4px; }
+.side { font: 700 11px/1 var(--mono); letter-spacing: .08em; padding: 5px 7px; border-radius: 5px; }
+.side.long { background: color-mix(in srgb, var(--long) 18%, transparent); color: var(--long); }
+.side.short { background: color-mix(in srgb, var(--short) 18%, transparent); color: var(--short); }
+.grade { font: 600 11px/1 var(--mono); color: var(--accent); letter-spacing: .06em; }
+.grade.watch { color: var(--muted); }
+.prob { margin-left: auto; text-align: right; }
+.prob b { font: 600 26px/1 var(--mono); display: block; }
+.prob span { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.prob .grade { display: inline-block; margin-top: 4px; }
+.spark { display: block; width: 100%; height: 44px; }
+.levels { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.levels div { padding: 10px 8px; border-right: 1px solid var(--line); min-width: 0; }
+.levels div:last-child { border-right: 0; }
+.levels label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.levels output { display: block; font: 600 13px/1.3 var(--mono); overflow-wrap: anywhere; }
+.levels em { font: 400 11px var(--mono); font-style: normal; color: var(--muted); }
+.levels .stop output { color: var(--short); } .levels .tp output { color: var(--long); }
+.t-body { padding: 12px 14px 14px; display: grid; gap: 10px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px/1.4 var(--mono); color: var(--muted); }
+.meta b { color: var(--fg); font-weight: 600; }
+details summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--muted); list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: '+ '; font-family: var(--mono); }
+details[open] summary::before { content: '− '; }
+.reasons { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.reasons li { display: flex; gap: 8px; }
+.reasons li span { font: 600 12px/1.6 var(--mono); width: 26px; flex: none; color: var(--long); }
+.reasons li.neg span { color: var(--short); }
+.warn { font-size: 13px; color: var(--warn); display: grid; gap: 4px; }
+.warn p { margin: 0; }
+.links { display: flex; gap: 8px; flex-wrap: wrap; }
+.links a { font-size: 13px; color: var(--accent); text-decoration: none; }
+.empty { background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 22px 16px; color: var(--muted); text-align: center; }
+table { width: 100%; border-collapse: collapse; font: 13px/1.3 var(--mono); }
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+th, td { padding: 9px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; position: sticky; top: 0; background: var(--panel); cursor: pointer; }
+th:first-child, td:first-child { text-align: left; }
+tr:last-child td { border-bottom: 0; }
+.up { color: var(--long); } .dn { color: var(--short); }
+.news { display: grid; gap: 2px; }
+.news a { display: block; padding: 11px 0; border-bottom: 1px solid var(--line); color: var(--fg); text-decoration: none; }
+.news a small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.dot.p { background: var(--long); } .dot.n { background: var(--short); }
+form.settings { display: grid; gap: 14px; }
+.field { display: grid; gap: 5px; }
+.field label { font-weight: 600; font-size: 14px; }
+.field small { color: var(--muted); font-size: 12px; }
+input, select { font: 15px var(--mono); background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.note { font-size: 13px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 12px; margin: 18px 0; }
+.note b { color: var(--fg); }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-weight: 600; font-size: 14px; z-index: 9; }
+@media (max-width: 420px) { .levels { grid-template-columns: repeat(2, 1fr); } .levels div:nth-child(2) { border-right: 0; } .levels div:nth-child(-n+2) { border-bottom: 1px solid var(--line); } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="#f0b429" stroke-width="2"/><path d="M15.5 8.5 13 13l-4.5 2.5L11 11z" fill="#f0b429"/></svg>Market Compass</div>
+      <div class="spacer"></div>
+      <button class="btn" id="scanBtn" type="button">Scan now</button>
+    </div>
+    <div class="progress" id="prog" hidden><i></i></div>
+    <div class="chips" id="chips"></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="signals" aria-selected="true">Signals</button>
+      <button class="tab" role="tab" data-tab="macro">Gold · Dollar · Oil</button>
+      <button class="tab" role="tab" data-tab="market">Top 100</button>
+      <button class="tab" role="tab" data-tab="news">News</button>
+      <button class="tab" role="tab" data-tab="settings">Settings</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="status" id="status">Tap Scan now to read the market.</div>
+
+  <section id="signals" data-view></section>
+  <section id="macro" data-view hidden></section>
+  <section id="market" data-view hidden></section>
+  <section id="news" data-view hidden></section>
+
+  <section id="settings" data-view hidden>
+    <h2>Your account</h2>
+    <form class="settings" id="settingsForm">
+      <div class="row2">
+        <div class="field"><label for="accountSize">Account size ($)</label><input id="accountSize" type="number" min="10" step="10" inputmode="decimal"></div>
+        <div class="field"><label for="riskPct">Risk per trade (%)</label><input id="riskPct" type="number" min="0.1" max="5" step="0.1" inputmode="decimal"></div>
+      </div>
+      <small style="color:var(--muted);font-size:12px;margin-top:-6px">If the stop is hit you lose this share of your account. Pros use 0.5–2%.</small>
+      <h2>Signal filter</h2>
+      <div class="row2">
+        <div class="field"><label for="minScore">Minimum score (of 10)</label><input id="minScore" type="number" min="5" max="10" step="1" inputmode="numeric"></div>
+        <div class="field"><label for="minProb">Minimum hit chance (%)</label><input id="minProb" type="number" min="40" max="90" step="1" inputmode="numeric"></div>
+      </div>
+      <small style="color:var(--muted);font-size:12px;margin-top:-6px">Higher numbers give fewer, stronger signals. Some days nothing will qualify. That is normal.</small>
+      <h2>Alerts</h2>
+      <div class="field"><label for="autoScan">Re-scan while the app is open</label>
+        <select id="autoScan"><option value="0">Off</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="240">Every 4 hours</option></select>
+      </div>
+      <button class="btn ghost" type="button" id="notifyBtn">Turn on notifications</button>
+      <small style="color:var(--muted);font-size:12px">On iPhone, notifications only work after you add this app to your Home Screen (Share → Add to Home Screen). For alerts while the app is closed, set up the background scanner in the README.</small>
+      <h2>Optional data keys</h2>
+      <div class="field"><label for="twelveKey">Twelve Data key</label><input id="twelveKey" type="text" autocomplete="off" spellcheck="false" placeholder="for oil, spot gold and EUR/USD"><small>Free at twelvedata.com. Without it, gold uses the PAXG token and oil is skipped.</small></div>
+      <div class="field"><label for="newsKey">CryptoCompare key</label><input id="newsKey" type="text" autocomplete="off" spellcheck="false" placeholder="for crypto headlines"><small>Free at cryptocompare.com. Headlines may load without it.</small></div>
+      <button class="btn" type="submit">Save settings</button>
+    </form>
+    <div class="note">
+      <b>How signals work.</b> Every 4-hour candle of each asset is scored 0–10 on eight checks: the 20-day trend, medium and short trends, MACD momentum, RSI, trend strength (ADX), volume and Bitcoin's direction. When the score reaches your minimum, the app replays the same rule over the last ~80 days and counts how often the first target was hit before the stop. That count, blended with the rate across all 100 coins, is the <b>hit chance</b>. Stops are 1.5× the average 4-hour range (ATR). Target 1 is the same distance (1:1). Target 2 is double (2:1). A trade that reaches neither within 3 days is closed.
+    </div>
+    <div class="note">
+      <b>Read this before trading.</b> Hit chance is history, not a promise. A 65% setup still loses about one trade in three, and losing streaks of four or five happen. Past results ignore fees (~0.1% per side) and slippage. Never risk money you need. Leverage multiplies losses as fast as gains. This app gives information, not financial advice.
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+<script src="engine.js"></script>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('mc:' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('mc:' + k, JSON.stringify(v)); } catch (e) {} },
+  };
+  const settings = Object.assign({ accountSize: 100, riskPct: 1, minScore: 7, minProb: 60, autoScan: 30, twelveKey: '', newsKey: '' }, store.get('settings', {}));
+  let last = store.get('lastScan', null);
+  let busy = false, timer = null, sortKey = 'volume24h', sortDir = -1;
+
+  // ---------- formatting ----------
+  const fmt = p => {
+    if (!isFinite(p)) return '–';
+    const a = Math.abs(p);
+    const d = a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : 8;
+    return p.toLocaleString('en-US', { minimumFractionDigits: Math.min(d, 2), maximumFractionDigits: d });
+  };
+  const pct = (a, b) => ((b / a - 1) * 100);
+  const sPct = x => (x > 0 ? '+' : '') + x.toFixed(2) + '%';
+  const money = x => '$' + (x >= 1e9 ? (x / 1e9).toFixed(2) + 'B' : x >= 1e6 ? (x / 1e6).toFixed(1) + 'M' : x.toFixed(2));
+  const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2600); }
+
+  function spark(vals, side) {
+    if (!vals || vals.length < 2) return '';
+    const min = Math.min(...vals), max = Math.max(...vals), w = 300, h = 44;
+    const pts = vals.map((v, i) => [i / (vals.length - 1) * w, h - 4 - (v - min) / (max - min || 1) * (h - 8)]);
+    const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const col = side === 'short' ? 'var(--short)' : 'var(--long)';
+    const end = pts[pts.length - 1];
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+      <path d="${line} L${w} ${h} L0 ${h}Z" fill="${col}" opacity=".10"/><path d="${line}" fill="none" stroke="${col}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+      <circle cx="${end[0]}" cy="${end[1]}" r="3" fill="${col}"/></svg>`;
+  }
+
+  function ticket(s) {
+    const a = s.asset, p = s.plan;
+    const tradeUrl = a.kind === 'crypto' ? `https://www.binance.com/en/trade/${a.base}_USDT?type=spot` : a.label?.startsWith('Gold') ? 'https://www.binance.com/en/trade/PAXG_USDT' : a.label?.startsWith('EUR') ? 'https://www.binance.com/en/trade/EUR_USDT' : '';
+    const chartUrl = a.kind === 'crypto' ? `https://www.tradingview.com/chart/?symbol=BINANCE:${a.symbol}` : '';
+    const h = s.history;
+    return `<article class="ticket ${s.grade}">
+      <div class="t-head">
+        <div class="sym">${esc(a.base)}<small>${a.kind === 'crypto' ? esc(a.symbol) + ' · ' + sPct(a.change24h) + ' 24h' : esc(a.note || '')}</small></div>
+        <span class="side ${s.side}">${s.side.toUpperCase()}</span>
+        <div class="prob"><b>${Math.round(s.prob * 100)}%</b><span>hit chance · score ${s.score}/10</span><br><span class="grade ${s.grade}">${s.grade === 'go' ? 'MEETS YOUR FILTER' : 'WATCHLIST'}</span></div>
+      </div>
+      ${spark(a.spark, s.side)}
+      <div class="levels">
+        <div><label>Entry</label><output>${fmt(p.entry)}</output><em>last close</em></div>
+        <div class="stop"><label>Stop</label><output>${fmt(p.stop)}</output><em>${sPct(pct(p.entry, p.stop))}</em></div>
+        <div class="tp"><label>Target 1</label><output>${fmt(p.tp1)}</output><em>${sPct(pct(p.entry, p.tp1))}</em></div>
+        <div class="tp"><label>Target 2</label><output>${fmt(p.tp2)}</output><em>${sPct(pct(p.entry, p.tp2))}</em></div>
+      </div>
+      <div class="t-body">
+        <div class="meta">
+          <span>Past 80 days: <b>${h.wins} wins / ${h.losses} losses</b>${h.expired ? ' / ' + h.expired + ' expired' : ''}</span>
+          <span>Avg result <b class="${h.avgR >= 0 ? 'up' : 'dn'}">${h.avgR >= 0 ? '+' : ''}${h.avgR.toFixed(2)}R</b></span>
+        </div>
+        <div class="meta">
+          <span>Size for ${settings.riskPct}% risk: <b>${fmt(s.sizing.qty)} ${esc(a.kind === 'crypto' ? a.base : 'units')}</b></span>
+          <span>≈ <b>${money(s.sizing.notional)}</b>${s.sizing.leverage > 1 ? ` (needs ${s.sizing.leverage.toFixed(1)}x)` : ''}</span>
+          <span>If stopped: <b class="dn">−$${s.sizing.riskUsd.toFixed(2)}</b></span>
+        </div>
+        ${s.warnings.length ? `<div class="warn">${s.warnings.map(w => `<p>⚠ ${esc(w)}</p>`).join('')}</div>` : ''}
+        <details><summary>Why this signal</summary><ul class="reasons">${s.reasons.map(([pt, why]) => `<li class="${pt < 0 ? 'neg' : ''}"><span>${pt > 0 ? '+' : ''}${pt}</span>${esc(why)}</li>`).join('')}</ul>
+          ${s.headlines.length ? `<ul class="reasons">${s.headlines.map(n => `<li><span>${n.tone > 0 ? '▲' : n.tone < 0 ? '▼' : '•'}</span><a href="${esc(n.url)}" target="_blank" rel="noopener" style="color:var(--fg)">${esc(n.title)}</a></li>`).join('')}</ul>` : ''}
+        </details>
+        <div class="links">${chartUrl ? `<a href="${chartUrl}" target="_blank" rel="noopener">Open chart ↗</a>` : ''}${tradeUrl ? `<a href="${tradeUrl}" target="_blank" rel="noopener">Open on Binance ↗</a>` : ''}</div>
+      </div>
+    </article>`;
+  }
+
+  // ---------- views ----------
+  function renderChips() {
+    if (!last) { $('#chips').innerHTML = '<span class="chip">No scan yet</span>'; return; }
+    const btc = last.coins.find(c => c.base === 'BTC');
+    const f = last.fng;
+    $('#chips').innerHTML = [
+      btc ? `<span class="chip">BTC <b class="${btc.trend === 'up' ? 'up' : 'dn'}">${btc.trend === 'up' ? 'uptrend' : 'downtrend'}</b></span>` : '',
+      f ? `<span class="chip">Mood <b>${f.value} ${esc(f.label)}</b></span>` : '',
+      `<span class="chip">Past signals hit <b>${Math.round(last.pool.long * 100)}%</b> long · <b>${Math.round(last.pool.short * 100)}%</b> short</span>`,
+      `<span class="chip">Updated <b>${ago(last.at)}</b></span>`,
+    ].join('');
+  }
+
+  function renderSignals() {
+    const crypto = last ? last.signals.filter(s => s.asset.kind === 'crypto') : [];
+    const go = crypto.filter(s => s.grade === 'go'), watch = crypto.filter(s => s.grade === 'watch').slice(0, 10);
+    $('#signals').innerHTML = !last ? `<div class="empty">Tap <b>Scan now</b>. The app reads 4-hour charts for the 100 most-traded coins on Binance, scores each one and checks how the same setup did over the past 80 days. It takes about 30 seconds.</div>` :
+      `<h2>Ready to consider (${go.length})</h2><p class="sub">Score ≥ ${settings.minScore}/10 and past hit chance ≥ ${settings.minProb}%.</p>
+      <div class="list">${go.length ? go.map(ticket).join('') : `<div class="empty">Nothing meets your filter right now. That is a valid answer: no trade is better than a weak trade. Check the watchlist or scan again after the next 4-hour candle.</div>`}</div>
+      <h2>Watchlist (${watch.length})</h2><p class="sub">Close to qualifying. Wait for confirmation.</p>
+      <div class="list">${watch.map(ticket).join('') || '<div class="empty">No coins are close right now.</div>'}</div>`;
+  }
+
+  function renderMacro() {
+    if (!last) { $('#macro').innerHTML = '<div class="empty">Scan first to read gold, the dollar and oil.</div>'; return; }
+    const sigs = last.signals.filter(s => s.asset.kind === 'macro');
+    const rows = last.macro.map(m => {
+      if (m.missing) return `<div class="empty"><b style="color:var(--fg)">${esc(m.label)}</b><br>${esc(m.note)}${m.error ? '<br><small>' + esc(m.error) + '</small>' : ''}</div>`;
+      const best = sigs.filter(s => s.asset.label === m.label);
+      if (best.length) return best.map(ticket).join('');
+      return `<article class="ticket"><div class="t-head"><div class="sym">${esc(m.label)}<small>${esc(m.note)}</small></div>
+        <div class="prob"><b>${fmt(m.lastClose)}</b><span>${m.trend === 'up' ? 'uptrend' : 'downtrend'} · long ${m.now.long}/10 · short ${m.now.short}/10</span></div></div>
+        ${spark(m.spark, m.trend === 'up' ? 'long' : 'short')}<div class="t-body"><div class="meta">No clear setup right now. Neither side scores high enough.</div></div></article>`;
+    }).join('');
+    $('#macro').innerHTML = `<h2>Gold, dollar and oil</h2><p class="sub">Same rules as crypto, without the Bitcoin check.</p><div class="list">${rows}</div>`;
+  }
+
+  function renderMarket() {
+    if (!last) { $('#market').innerHTML = '<div class="empty">Scan first to load the top 100.</div>'; return; }
+    const cols = [['base', 'Coin'], ['price', 'Price'], ['change24h', '24h'], ['volume24h', 'Volume'], ['longScore', 'Long'], ['shortScore', 'Short'], ['rsi', 'RSI'], ['trend', 'Trend']];
+    const rows = last.coins.map(c => ({ ...c, longScore: c.now.long, shortScore: c.now.short, rsi: c.now.rsi }))
+      .sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : a[sortKey] < b[sortKey] ? -1 : 0) * sortDir);
+    $('#market').innerHTML = `<h2>Top 100 by Binance volume</h2><p class="sub">Tap a column to sort. Scores are out of 10 on the last closed 4-hour candle.</p>
+      <div class="tablebox"><table><thead><tr>${cols.map(([k, n]) => `<th data-k="${k}">${n}${sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}</th>`).join('')}</tr></thead><tbody>
+      ${rows.map(c => `<tr><td><b>${esc(c.base)}</b></td><td>${fmt(c.price)}</td><td class="${c.change24h >= 0 ? 'up' : 'dn'}">${sPct(c.change24h)}</td><td>${money(c.volume24h)}</td>
+        <td class="${c.longScore >= settings.minScore ? 'up' : ''}">${c.longScore}</td><td class="${c.shortScore >= settings.minScore ? 'dn' : ''}">${c.shortScore}</td><td>${c.rsi.toFixed(0)}</td><td class="${c.trend === 'up' ? 'up' : 'dn'}">${c.trend}</td></tr>`).join('')}
+      </tbody></table></div>`;
+    $('#market').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : -1; sortKey = k; renderMarket(); });
+  }
+
+  function renderNews() {
+    const n = last?.news || [];
+    $('#news').innerHTML = `<h2>Crypto headlines</h2><p class="sub">Green and red dots mark headlines that read positive or negative. It is a simple word check, so read the article before acting.</p>` +
+      (n.length ? `<div class="news">${n.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener"><span class="dot ${x.tone > 0 ? 'p' : x.tone < 0 ? 'n' : ''}"></span>${esc(x.title)}<small>${esc(x.source)} · ${ago(x.time)}</small></a>`).join('')}</div>`
+        : `<div class="empty">No headlines loaded. Add a free CryptoCompare key in Settings, then scan again.</div>`);
+  }
+
+  function renderAll() { renderChips(); renderSignals(); renderMacro(); renderMarket(); renderNews(); }
+
+  // ---------- scanning ----------
+  async function scan(silent) {
+    if (busy) return; busy = true;
+    const btn = $('#scanBtn'), prog = $('#prog');
+    btn.disabled = true; prog.hidden = false;
+    try {
+      const res = await MC.scan({
+        accountSize: +settings.accountSize, riskPct: +settings.riskPct, minScore: +settings.minScore, minProb: settings.minProb / 100,
+        twelveKey: settings.twelveKey.trim(), newsKey: settings.newsKey.trim(),
+      }, (msg, f) => { $('#status').textContent = msg + '…'; prog.firstElementChild.style.width = (f * 100) + '%'; });
+      last = res;
+      try { store.set('lastScan', res); } catch (e) {}
+      $('#status').textContent = `Read ${res.coins.length} coins${res.failed ? ` (${res.failed} failed to load)` : ''}. Next 4-hour candle closes ${nextClose()}.`;
+      renderAll();
+      notifyNew(res);
+    } catch (e) {
+      $('#status').textContent = 'Scan failed: ' + e.message + '. Check your connection and try again.';
+    } finally { busy = false; btn.disabled = false; prog.hidden = true; }
+  }
+
+  function nextClose() {
+    const now = new Date(), h = now.getUTCHours(), next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), Math.floor(h / 4) * 4 + 4));
+    return 'at ' + next.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  async function notifyNew(res) {
+    const seen = new Set(store.get('seen', []));
+    const fresh = res.signals.filter(s => s.grade === 'go' && !seen.has(s.id));
+    fresh.forEach(s => seen.add(s.id));
+    store.set('seen', [...seen].slice(-500));
+    if (!fresh.length || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const reg = await navigator.serviceWorker?.getRegistration();
+    for (const s of fresh.slice(0, 5)) {
+      const title = `${s.side.toUpperCase()} ${s.asset.base} · ${Math.round(s.prob * 100)}% hit chance`;
+      const body = `Entry ${fmt(s.plan.entry)} · Stop ${fmt(s.plan.stop)} · Target ${fmt(s.plan.tp1)}`;
+      if (reg) reg.showNotification(title, { body, icon: 'icon-192.png', tag: s.id });
+      else new Notification(title, { body });
+    }
+  }
+
+  function schedule() {
+    clearInterval(timer);
+    const m = +settings.autoScan;
+    if (m > 0) timer = setInterval(() => { if (document.visibilityState === 'visible') scan(true); }, m * 60000);
+  }
+
+  // ---------- wiring ----------
+  document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x === t));
+    document.querySelectorAll('[data-view]').forEach(v => v.hidden = v.id !== t.dataset.tab);
+    try { sessionStorage.setItem('mc:tab', t.dataset.tab); } catch (e) {}
+  });
+  try { const t = sessionStorage.getItem('mc:tab'); if (t) document.querySelector(`.tab[data-tab="${t}"]`)?.click(); } catch (e) {}
+
+  const f = $('#settingsForm');
+  ['accountSize', 'riskPct', 'minScore', 'minProb', 'autoScan', 'twelveKey', 'newsKey'].forEach(k => { f.elements[k].value = settings[k]; });
+  f.onsubmit = e => {
+    e.preventDefault();
+    ['accountSize', 'riskPct', 'minScore', 'minProb', 'autoScan', 'twelveKey', 'newsKey'].forEach(k => settings[k] = f.elements[k].value);
+    settings.riskPct = Math.min(5, Math.max(0.1, +settings.riskPct || 1));
+    store.set('settings', settings); schedule(); toast('Settings saved. Scanning with the new filter.'); scan();
+  };
+  $('#notifyBtn').onclick = async () => {
+    if (!('Notification' in window)) { toast('Add the app to your Home Screen first, then try again.'); return; }
+    const p = await Notification.requestPermission();
+    toast(p === 'granted' ? 'Notifications are on.' : 'Notifications are blocked. Allow them in iPhone Settings → Notifications.');
+  };
+  $('#scanBtn').onclick = () => scan();
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  renderAll();
+  if (last) $('#status').textContent = `Showing the scan from ${ago(last.at)}.`;
+  schedule();
+  if (!last || Date.now() - last.at > 30 * 60000) scan();
+})();
+</script>
+</body>
+</html>
