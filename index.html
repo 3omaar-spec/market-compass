@@ -86,6 +86,18 @@ details[open] summary::before { content: '− '; }
 .warn p { margin: 0; }
 .links { display: flex; gap: 8px; flex-wrap: wrap; }
 .links a { font-size: 13px; color: var(--accent); text-decoration: none; }
+.how { border-top: 1px solid var(--line); padding-top: 10px; }
+.how summary { color: var(--accent); font-size: 14px; }
+.steps { margin: 10px 0 0; padding: 0; list-style: none; counter-reset: st; display: grid; gap: 9px; }
+.steps li { counter-increment: st; display: grid; grid-template-columns: 24px 1fr; gap: 8px; font-size: 14px; line-height: 1.45; }
+.steps li::before { content: counter(st); font: 700 12px/22px var(--mono); width: 22px; height: 22px; border-radius: 50%; background: var(--line); color: var(--fg); text-align: center; }
+.steps h4 { grid-column: 1 / -1; margin: 6px 0 -2px; font: 600 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.steps li.h { counter-increment: none; display: block; }
+.steps li.h::before { display: none; }
+.cp { font: 600 13px/1 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; color: var(--fg); white-space: nowrap; }
+.cp::after { content: ' ⧉'; color: var(--muted); font-weight: 400; }
+.steps .why { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.steps .stop-txt { color: var(--warn); }
 .empty { background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 22px 16px; color: var(--muted); text-align: center; }
 table { width: 100%; border-collapse: collapse; font: 13px/1.3 var(--mono); }
 .tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
@@ -213,9 +225,93 @@ input, select { font: 15px var(--mono); background: var(--panel); color: var(--f
       <circle cx="${end[0]}" cy="${end[1]}" r="3" fill="${col}"/></svg>`;
   }
 
+
+  // ---------- step-by-step trade instructions ----------
+  // Plain number for copying into an exchange (no thousands separators).
+  const raw = p => { const a = Math.abs(p); const d = a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : 8; return (+p.toFixed(d)).toString(); };
+  const rawQty = q => { const d = q >= 100 ? 0 : q >= 1 ? 3 : q >= 0.01 ? 5 : 8; return (Math.floor(q * 10 ** d) / 10 ** d).toString(); };
+  const cp = v => `<button type="button" class="cp" data-copy="${esc(v)}" aria-label="Copy ${esc(v)}">${esc(v)}</button>`;
+  const when = t => new Date(t).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  function steps(s) {
+    const a = s.asset, p = s.plan, long = s.side === 'long', atr = a.now.atr;
+    const cfgH = MC.DEFAULTS.horizon, candle = 4 * 3600e3;
+    const signalAt = a.closedAt + candle;                 // the 4h candle that produced the signal closed here
+    const fillBy = signalAt + candle;                     // the next candle closes: plan is stale after this
+    const exitBy = signalAt + cfgH * candle;              // the trade's 3-day window ends here
+    const acct = +settings.accountSize;
+    const isGold = a.label?.startsWith('Gold'), isEur = a.label?.startsWith('EUR'), isOil = a.label?.startsWith('Crude');
+    const pair = a.kind === 'crypto' ? a.base + '/USDT' : isGold ? 'PAXG/USDT' : isEur ? 'EUR/USDT' : a.label;
+    const unit = a.kind === 'crypto' ? a.base : isGold ? 'PAXG' : isEur ? 'EUR' : 'units';
+    const chaseLimit = long ? p.entry + 0.5 * atr : p.entry - 0.5 * atr;
+    const beStop = p.entry;
+
+    // Spot can only buy what the cash covers. Shorts and oversized longs need futures.
+    const spotOk = long && s.sizing.notional <= acct;
+    let qty = s.sizing.qty;
+    const half = rawQty(qty / 2), rest = rawQty(qty - +rawQty(qty / 2));
+    const lev = Math.max(2, Math.ceil(s.sizing.leverage));
+    const tooSmall = s.sizing.notional / 2 < 5.5;
+    const L = [];
+    const H = t => L.push(`<li class="h"><h4>${t}</h4></li>`);
+    const S = (t, why) => L.push(`<li><span>${t}${why ? `<span class="why">${why}</span>` : ''}</span></li>`);
+
+    if (s.grade !== 'go') S(`<b>Don't trade this yet.</b> It's on the watchlist. Wait until it moves to <i>Ready to consider</i> after a later scan, then follow the steps on that card. Its prices will be different.`);
+
+    H('Before you start');
+    S(`Check the time. This plan is valid until <b>${when(fillBy)}</b>, when the next 4-hour candle closes. After that, scan again and use the new numbers.`);
+    S(`Check the live price. ${long ? 'If it is already above' : 'If it is already below'} ${cp(raw(chaseLimit))}, or ${long ? 'below' : 'above'} the stop ${cp(raw(p.stop))}, <b>skip this trade</b>.`, 'You would be chasing the move or entering a trade that has already failed.');
+    if (tooSmall) S(`<span class="stop-txt">This position is only about ${money(s.sizing.notional)}. Binance won't accept orders under about $5, and each half would be smaller than that.</span> Raise your account size or risk % in Settings, or place a single order without splitting it.`);
+    if (isOil) {
+      S(`Binance doesn't list oil. Use your own broker's WTI oil product (CFD or futures), and use the same prices below: entry ${cp(raw(p.entry))}, stop ${cp(raw(p.stop))}, target 1 ${cp(raw(p.tp1))}, target 2 ${cp(raw(p.tp2))}.`);
+      S(`Size the position so a fall to the stop loses no more than <b>$${s.sizing.riskUsd.toFixed(2)}</b>.`, 'Contract sizes differ between brokers, so the app can\'t show the unit count.');
+      return L.join('');
+    }
+
+    if (spotOk) {
+      H('Buy on Binance Spot');
+      S(`Open Binance → <b>Trade → Spot</b> and search <b>${pair}</b>.`);
+      S(`Tap <b>Buy</b> and choose <b>Limit</b>.`);
+      S(`Price: ${cp(raw(p.entry))}`);
+      S(`Amount: ${cp(rawQty(qty))} ${esc(unit)} (about ${money(s.sizing.notional)} of your ${money(acct)}).`, `If the stop is hit, you lose about $${s.sizing.riskUsd.toFixed(2)}. That's your ${settings.riskPct}% risk.`);
+      S(`Tap <b>Buy ${esc(unit)}</b>. If it hasn't filled by ${when(fillBy)}, cancel it under <b>Open Orders</b>.`);
+      H('Protect it as soon as the buy fills');
+      S(`Tap <b>Sell</b> and choose <b>OCO</b>. Place <b>two</b> OCO orders, one for each half:`);
+      S(`<b>OCO A</b>: Amount ${cp(half)} · Take-profit (limit) price ${cp(raw(p.tp1))} · Stop price ${cp(raw(p.stop))} · Stop limit price ${cp(raw(p.stop * 0.998))}`, 'The stop-limit price is set 0.2% lower so the order still fills if the price drops fast.');
+      S(`<b>OCO B</b>: Amount ${cp(rest)} · Take-profit (limit) price ${cp(raw(p.tp2))} · Stop price ${cp(raw(p.stop))} · Stop limit price ${cp(raw(p.stop * 0.998))}`);
+      S(`Check <b>Open Orders</b>. You should see both OCOs. Don't leave the position without them.`);
+      H('Manage it');
+      S(`When <b>OCO A</b> takes profit at ${cp(raw(p.tp1))}, cancel <b>OCO B</b> and place it again with the same amount ${cp(rest)} and take-profit ${cp(raw(p.tp2))}, but move the stop price to your entry ${cp(raw(beStop))} (stop limit ${cp(raw(beStop * 0.998))}).`, 'From then on, the worst case for the rest of the trade is breaking even.');
+      S(`If the stop is hit, both halves close automatically. Accept the loss and don't buy again to "win it back".`);
+      S(`If neither the stop nor target 2 has been hit by <b>${when(exitBy)}</b>, cancel the open orders and sell what's left at <b>Market</b>.`, 'The track record shown above only covers 3 days.');
+    } else {
+      const futUrl = a.kind === 'crypto' || isGold ? 'USDⓈ-M Futures' : '';
+      if (isEur && !long) {
+        S(`To bet on a stronger dollar, you sell EUR. Binance Spot only lets you sell EUR you already hold. Without EUR, use your broker's <b>EUR/USD</b> with the same prices below.`);
+      }
+      H(`Open the ${long ? 'long' : 'short'} (Binance ${futUrl || 'Futures'})`);
+      if (long) S(`This long needs ${money(s.sizing.notional)} but your account is ${money(acct)}, so it needs Futures. You can also buy less on Spot, which risks less than ${settings.riskPct}%.`);
+      else S(`Spot can't short, so this uses Futures. <span class="stop-txt">Futures carry liquidation risk. If Futures isn't available in your country, skip this trade.</span>`);
+      S(`Open Binance → <b>Futures → USDⓈ-M</b> and search <b>${pair.replace('/', '')}</b> Perpetual.`);
+      S(`At the top, set margin to <b>Isolated</b> and leverage to <b>${lev}x</b>.`, lev > 5 ? `<span class="stop-txt">That leverage is high. Consider lowering your risk % in Settings.</span>` : 'Your size already fixes the risk. Low leverage keeps liquidation far from your stop.');
+      S(`Choose <b>Limit</b>. Price: ${cp(raw(p.entry))} · Size: ${cp(rawQty(qty))} ${esc(unit)}`, `Size is in ${esc(unit)}, not USDT. Tap the unit next to the size field to switch it if needed. If the stop is hit, you lose about $${s.sizing.riskUsd.toFixed(2)}.`);
+      S(`Tick <b>TP/SL</b>: Take profit ${cp(raw(p.tp2))} · Stop loss ${cp(raw(p.stop))} (trigger: Mark price).`);
+      S(`Tap <b>${long ? 'Buy/Long' : 'Sell/Short'}</b>. If it hasn't filled by ${when(fillBy)}, cancel it under <b>Open Orders</b>.`);
+      H('Take half at target 1');
+      S(`Once it fills, place a <b>Limit</b> ${long ? 'sell' : 'buy'} order with <b>Reduce-Only</b> ticked: Price ${cp(raw(p.tp1))} · Size ${cp(half)}`);
+      H('Manage it');
+      S(`When target 1 fills, open <b>Positions → TP/SL</b> and move the stop loss to your entry ${cp(raw(beStop))}.`, 'From then on, the worst case for the rest of the trade is breaking even.');
+      S(`If the stop is hit, the position closes automatically. Accept the loss and don't open it again right away.`);
+      S(`If it's still open on <b>${when(exitBy)}</b>, close it: <b>Positions → Close → Market</b>.`, 'The track record shown above only covers 3 days.');
+    }
+    return L.join('');
+  }
+
   function ticket(s) {
     const a = s.asset, p = s.plan;
-    const tradeUrl = a.kind === 'crypto' ? `https://www.binance.com/en/trade/${a.base}_USDT?type=spot` : a.label?.startsWith('Gold') ? 'https://www.binance.com/en/trade/PAXG_USDT' : a.label?.startsWith('EUR') ? 'https://www.binance.com/en/trade/EUR_USDT' : '';
+    const futures = s.side === 'short' || s.sizing.notional > +settings.accountSize;
+    const tradeUrl = futures && (a.kind === 'crypto' || a.label?.startsWith('Gold')) ? `https://www.binance.com/en/futures/${a.kind === 'crypto' ? a.symbol : 'PAXGUSDT'}` :
+      a.kind === 'crypto' ? `https://www.binance.com/en/trade/${a.base}_USDT?type=spot` : a.label?.startsWith('Gold') ? 'https://www.binance.com/en/trade/PAXG_USDT' : a.label?.startsWith('EUR') ? 'https://www.binance.com/en/trade/EUR_USDT' : '';
     const chartUrl = a.kind === 'crypto' ? `https://www.tradingview.com/chart/?symbol=BINANCE:${a.symbol}` : '';
     const h = s.history;
     return `<article class="ticket ${s.grade}">
@@ -245,6 +341,7 @@ input, select { font: 15px var(--mono); background: var(--panel); color: var(--f
         <details><summary>Why this signal</summary><ul class="reasons">${s.reasons.map(([pt, why]) => `<li class="${pt < 0 ? 'neg' : ''}"><span>${pt > 0 ? '+' : ''}${pt}</span>${esc(why)}</li>`).join('')}</ul>
           ${s.headlines.length ? `<ul class="reasons">${s.headlines.map(n => `<li><span>${n.tone > 0 ? '▲' : n.tone < 0 ? '▼' : '•'}</span><a href="${esc(n.url)}" target="_blank" rel="noopener" style="color:var(--fg)">${esc(n.title)}</a></li>`).join('')}</ul>` : ''}
         </details>
+        <details class="how"${s.grade === 'go' ? ' open' : ''}><summary>How to place this trade, step by step</summary><ol class="steps">${steps(s)}</ol></details>
         <div class="links">${chartUrl ? `<a href="${chartUrl}" target="_blank" rel="noopener">Open chart ↗</a>` : ''}${tradeUrl ? `<a href="${tradeUrl}" target="_blank" rel="noopener">Open on Binance ↗</a>` : ''}</div>
       </div>
     </article>`;
@@ -377,6 +474,11 @@ input, select { font: 15px var(--mono); background: var(--panel); color: var(--f
     toast(p === 'granted' ? 'Notifications are on.' : 'Notifications are blocked. Allow them in iPhone Settings → Notifications.');
   };
   $('#scanBtn').onclick = () => scan();
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-copy]'); if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copied ' + b.dataset.copy); }
+    catch (err) { toast(b.dataset.copy); }
+  });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   renderAll();
